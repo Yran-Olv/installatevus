@@ -5,6 +5,60 @@ ACESSANDO DIRETORIO DO INSTALADOR & INICIANDO INSTALAÇÕES ADICIONAIS (USAR EST
 cd /root/installatevus && sudo chmod +x install_primaria && sudo ./install_primaria
 ```
 
+## erro encontrado o instalador não configura o pm2 corretamente
+
+1️⃣ Configurar PM2 para iniciar no boot
+
+Como você está usando o usuário deploy:
+
+# Logado como deploy
+pm2 startup systemd
+
+
+Ele vai te mostrar um comando parecido com:
+
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u deploy --hp /home/deploy
+
+
+Copie e execute esse comando exatamente como ele aparecer. Isso cria o serviço systemd para o PM2.
+
+2️⃣ Salvar processos atuais do PM2
+
+Depois de iniciar suas aplicações (backend e frontend), salve a lista de processos:
+
+pm2 save
+
+
+Isso cria o arquivo /home/deploy/.pm2/dump.pm2 que será carregado automaticamente no boot.
+
+3️⃣ Testar reinício
+
+Agora, quando você reiniciar a VPS:
+
+sudo reboot
+
+
+Depois do reboot, logue como deploy e rode:
+
+pm2 list
+
+
+Você deverá ver todos os processos restaurados automaticamente.
+
+4️⃣ Dicas importantes
+
+Certifique-se de que você sempre inicia suas aplicações como deploy antes de pm2 save.
+
+Se mudar o path ou o nome dos scripts, atualize o PM2 e salve novamente com pm2 save.
+
+Para reiniciar uma aplicação específica sem perder a lista, você pode fazer:
+
+pm2 restart atevus-backend
+pm2 save
+
+
+
+
 Este repositório contém dois scripts que automatizam a preparação de servidores Ubuntu 22.04 LTS para rodar o stack completo (backend + frontend) do projeto:
 
 - `install_primaria`: provisiona uma infraestrutura “do zero” (usuário, pacotes, Node, Postgres, Redis, Docker, Nginx, PM2, Certbot, deploy do código etc.).
