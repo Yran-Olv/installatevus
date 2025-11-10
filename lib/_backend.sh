@@ -39,27 +39,23 @@ backend_redis_create() {
     redis:7.2-alpine \
     redis-server --requirepass "${mysql_root_password}" --save 60 1 --loglevel warning
 
-  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$ BEGIN
-  PERFORM 1 FROM pg_roles WHERE rolname = '${instancia_add}';
-  IF NOT FOUND THEN
-    EXECUTE 'CREATE ROLE ' || quote_ident('${instancia_add}') || ' LOGIN PASSWORD ''${mysql_root_password}''';
-  ELSE
-    EXECUTE 'ALTER ROLE ' || quote_ident('${instancia_add}') || ' PASSWORD ''${mysql_root_password}''';
-  END IF;
-END \$\$;
+  local role_exists
+  role_exists="$(run_as_postgres "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='${instancia_add}'\"")"
+  role_exists="${role_exists//[[:space:]]/}"
+  if [[ "${role_exists}" != "1" ]]; then
+    run_as_postgres "psql -c \"CREATE ROLE \\\"${instancia_add}\\\" LOGIN PASSWORD '${mysql_root_password}'\""
+  else
+    run_as_postgres "psql -c \"ALTER ROLE \\\"${instancia_add}\\\" PASSWORD '${mysql_root_password}'\""
+  fi
 
-DO \$\$ BEGIN
-  PERFORM 1 FROM pg_database WHERE datname = '${instancia_add}';
-  IF NOT FOUND THEN
-    EXECUTE 'CREATE DATABASE ' || quote_ident('${instancia_add}') ||
-            ' OWNER ' || quote_ident('${instancia_add}');
-  ELSE
-    EXECUTE 'ALTER DATABASE ' || quote_ident('${instancia_add}') ||
-            ' OWNER TO ' || quote_ident('${instancia_add}');
-  END IF;
-END \$\$;
-SQL
+  local db_exists
+  db_exists="$(run_as_postgres "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='${instancia_add}'\"")"
+  db_exists="${db_exists//[[:space:]]/}"
+  if [[ "${db_exists}" != "1" ]]; then
+    run_as_postgres "createdb -O \\\"${instancia_add}\\\" \\\"${instancia_add}\\\""
+  else
+    run_as_postgres "psql -c \"ALTER DATABASE \\\"${instancia_add}\\\" OWNER TO \\\"${instancia_add}\\\"\""
+  fi
 
   sleep 1
 }

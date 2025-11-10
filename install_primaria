@@ -7,6 +7,8 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+umask 0002
+
 # reset shell colors
 tput init
 
@@ -60,6 +62,7 @@ system_certbot_install
 
 # system config
 system_create_user
+system_permissions_fix
 
 # backend related
 system_git_clone
@@ -83,3 +86,4 @@ frontend_nginx_setup
 system_nginx_conf
 system_nginx_restart
 system_certbot_setup
+system_permissions_fix

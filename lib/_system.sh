@@ -27,6 +27,28 @@ system_create_user() {
 }
 
 #######################################
+# ensures permissions for root and deploy
+#######################################
+system_permissions_fix() {
+  print_banner
+  printf "${WHITE} 💻 Garantindo permissões de arquivos...${GRAY_LIGHT}\n\n"
+  sleep 1
+
+  ensure_directory "/home/deploy"
+  chown -R deploy:deploy /home/deploy
+  chmod -R u+rwX,g+rwX /home/deploy
+  chmod 775 /home/deploy
+
+  if [[ -n "${PROJECT_ROOT:-}" && -d "${PROJECT_ROOT}" ]]; then
+    chown -R root:deploy "${PROJECT_ROOT}"
+    chmod -R u+rwX,g+rwX "${PROJECT_ROOT}"
+    chmod -R o-rwx "${PROJECT_ROOT}"
+  fi
+
+  sleep 1
+}
+
+#######################################
 # clones repositories using git
 #######################################
 system_git_clone() {
@@ -55,6 +77,14 @@ system_update() {
   sleep 1
 
   export DEBIAN_FRONTEND=noninteractive
+
+  rm -f /etc/apt/sources.list.d/nodesource.list \
+    /etc/apt/sources.list.d/nodesource.list.save \
+    /etc/apt/trusted.gpg.d/nodesource.gpg \
+    /usr/share/keyrings/nodesource.gpg \
+    /usr/local/share/keyrings/nodesource.gpg \
+    /etc/apt/keyrings/nodesource.gpg
+
   apt-get update -y
   apt-get upgrade -y
   apt-get install -y \
@@ -276,41 +306,59 @@ EOF
   sleep 1
 }
 
-#######################################
-# installs node
-#######################################
+# installs node 20.19.5
 system_node_install() {
   print_banner
   printf "${WHITE} 💻 Verificando instalação do Node.js 20...${GRAY_LIGHT}\n\n"
   sleep 1
 
+  local desired_version="20.19.5"
   local need_install=1
   if command -v node >/dev/null 2>&1; then
     local current_version
     current_version="$(node -v | cut -c2-)"
-    if dpkg --compare-versions "${current_version}" ge "20.0.0"; then
+    if [[ "${current_version}" == "${desired_version}" ]]; then
       need_install=0
     fi
   fi
 
   if (( need_install )); then
-    apt-get update -y
-    apt-get install -y ca-certificates curl gnupg
+    local keyring="/usr/share/keyrings/nodesource.gpg"
+    local repo_file="/etc/apt/sources.list.d/nodesource.list"
+    local install_dir="/usr/local/lib/nodejs"
+    local tarball="/tmp/node-v${desired_version}-linux-x64.tar.xz"
 
-    local keyring_dir="/usr/local/share/keyrings"
-    local keyring="${keyring_dir}/nodesource.gpg"
+    sudo rm -f "${repo_file}" "${repo_file}.save" \
+      /etc/apt/trusted.gpg.d/nodesource.gpg \
+      /usr/local/share/keyrings/nodesource.gpg \
+      /etc/apt/keyrings/nodesource.gpg \
+      "${keyring}"
 
-    install -d -m 0755 "${keyring_dir}"
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor | tee "${keyring}" >/dev/null
-    chmod 0644 "${keyring}"
+    sudo apt-get purge -y nodejs npm >/dev/null 2>&1 || true
+    sudo apt-get update -y
+    sudo apt-get install -y ca-certificates curl tar xz-utils
 
-    echo "deb [signed-by=${keyring}] https://deb.nodesource.com/node_20.x $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+    sudo mkdir -p "${install_dir}"
+    sudo rm -rf "${install_dir}/node-v${desired_version}-linux-x64"
+    sudo rm -f "${tarball}"
 
-    apt-get update -y
-    apt-get install -y nodejs
+    curl -fsSL "https://nodejs.org/dist/v${desired_version}/node-v${desired_version}-linux-x64.tar.xz" -o "${tarball}"
+
+    sudo tar -xJf "${tarball}" -C "${install_dir}"
+    sudo ln -sfn "${install_dir}/node-v${desired_version}-linux-x64/bin/node" /usr/local/bin/node
+    sudo ln -sfn "${install_dir}/node-v${desired_version}-linux-x64/bin/npm" /usr/local/bin/npm
+    sudo ln -sfn "${install_dir}/node-v${desired_version}-linux-x64/bin/npx" /usr/local/bin/npx
   fi
-
+  local final_version="0"
+  if command -v node >/dev/null 2>&1; then
+    final_version="$(node -v | cut -c2-)"
+  fi
+  if [[ "${final_version}" != "${desired_version}" ]]; then
+    printf "${RED} ⚠️  Falha ao instalar o Node.js ${desired_version}. Versão detectada: ${final_version}.${GRAY_LIGHT}\n"
+    return 1
+  fi
   npm install --global npm@latest
+  echo "✅ Node.js $(node -v) e npm $(npm -v) instalados."
   sleep 1
 }
 
@@ -344,6 +392,35 @@ system_fail2ban_install() {
 }
 
 #######################################
+# configures fail2ban
+#######################################
+system_fail2ban_conf() {
+  print_banner
+  printf "${WHITE} 💻 Configurando fail2ban...${GRAY_LIGHT}\n\n"
+  sleep 1
+
+  local jail_dir="/etc/fail2ban/jail.d"
+  local jail_file="${jail_dir}/default.conf"
+
+  mkdir -p "${jail_dir}"
+  cat <<'EOF' > "${jail_file}"
+[DEFAULT]
+bantime = 10m
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+port    = ssh
+maxretry = 5
+EOF
+
+  systemctl restart fail2ban
+
+  sleep 1
+}
+
+#######################################
 # configure firewall
 #######################################
 system_firewall_conf() {
@@ -359,7 +436,7 @@ system_firewall_conf() {
   ufw allow 22
   ufw allow 80
   ufw allow 443
-  yes | ufw enable
+  ufw --force enable
 
   sleep 1
 }
@@ -404,6 +481,15 @@ system_pm2_install() {
   sleep 1
 
   npm install --global pm2
+
+  local pm2_bin
+  pm2_bin="$(npm root -g)/pm2/bin/pm2"
+  if [[ -x "${pm2_bin}" ]]; then
+    ln -sfn "${pm2_bin}" /usr/local/bin/pm2
+    chmod 0755 /usr/local/bin/pm2
+  fi
+
+  run_as_deploy "/usr/local/bin/pm2 -v >/dev/null 2>&1 || true"
   sleep 1
 }
 
