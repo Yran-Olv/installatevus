@@ -2,7 +2,7 @@
 
 ACESSANDO DIRETORIO DO INSTALADOR & INICIANDO INSTALAÇÕES ADICIONAIS (USAR ESTE COMANDO PARA SEGUNDA OU MAIS INSTALAÇÃO:
 ```bash
-cd /root/instalandoprimeiravez && sudo chmod +x install_primaria && sudo ./install_primaria
+cd /root/installatevus && sudo chmod +x install_primaria && sudo ./install_primaria
 ```
 
 Este repositório contém dois scripts que automatizam a preparação de servidores Ubuntu 22.04 LTS para rodar o stack completo (backend + frontend) do projeto:
