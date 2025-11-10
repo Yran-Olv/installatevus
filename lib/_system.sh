@@ -294,9 +294,18 @@ system_node_install() {
   fi
 
   if (( need_install )); then
-    local keyring="/usr/share/keyrings/nodesource.gpg"
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o "${keyring}"
-    echo "deb [signed-by=${keyring}] https://deb.nodesource.com/node_20.x $(lsb_release -cs) main" >/etc/apt/sources.list.d/nodesource.list
+    apt-get update -y
+    apt-get install -y ca-certificates curl gnupg
+
+    local keyring_dir="/usr/local/share/keyrings"
+    local keyring="${keyring_dir}/nodesource.gpg"
+
+    install -d -m 0755 "${keyring_dir}"
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor | tee "${keyring}" >/dev/null
+    chmod 0644 "${keyring}"
+
+    echo "deb [signed-by=${keyring}] https://deb.nodesource.com/node_20.x $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+
     apt-get update -y
     apt-get install -y nodejs
   fi
