@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Este instalador precisa ser executado como root (utilize sudo)." >&2
+  exit 1
+fi
+
+# reset shell colors
+tput init
+
+# https://stackoverflow.com/questions/59895/how-to-get-the-source-directory-of-a-bash-script-from-within-the-script-itself
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  PROJECT_ROOT="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$PROJECT_ROOT/$SOURCE"
+done
+PROJECT_ROOT="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+CONFIG_FILE="${PROJECT_ROOT}/config"
+
+# required imports
+source "${PROJECT_ROOT}"/variables/manifest.sh
+source "${PROJECT_ROOT}"/utils/manifest.sh
+source "${PROJECT_ROOT}"/lib/manifest.sh
+
+if [[ -f "${CONFIG_FILE}" ]]; then
+  source "${CONFIG_FILE}"
+fi
+
+# interactive CLI
+inquiry_options
+
+cat <<EOF > "${CONFIG_FILE}"
+deploy_password=${deploy_password}
+mysql_root_password=${mysql_root_password}
+db_pass=${db_pass}
+baileys_version=${baileys_version}
+EOF
+
+chown root:root "${CONFIG_FILE}"
+chmod 600 "${CONFIG_FILE}"
+
+# backend related
+system_git_clone
+backend_set_env
+backend_redis_create
+backend_node_dependencies
+backend_node_build
+backend_db_migrate
+backend_db_seed
+backend_start_pm2
+backend_nginx_setup
+
+# frontend related
+frontend_set_env
+frontend_node_dependencies
+frontend_node_build
+frontend_start_pm2
+frontend_nginx_setup
+
+# network related
+system_nginx_restart
+system_certbot_setup
