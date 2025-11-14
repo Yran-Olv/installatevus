@@ -58,7 +58,28 @@ pm2 save
 
 
 
+## outro erro encontrado ele não cria usaurio deploy
+1. Criar o usuário deploy corretamente
 
+Execute:
+
+sudo adduser deploy
+
+
+Defina senha.
+
+2. Adicionar o usuário ao sudo
+sudo usermod -aG sudo deploy
+
+3. Criar pasta no home do deploy (se você usa scripts que apontam para /home/deploy/)
+sudo mkdir -p /home/deploy
+sudo chown deploy:deploy /home/deploy -R
+
+4. Testar login
+su - deploy
+
+
+Se entrar sem erro → resolvido.
 Este repositório contém dois scripts que automatizam a preparação de servidores Ubuntu 22.04 LTS para rodar o stack completo (backend + frontend) do projeto:
 
 - `install_primaria`: provisiona uma infraestrutura “do zero” (usuário, pacotes, Node, Postgres, Redis, Docker, Nginx, PM2, Certbot, deploy do código etc.).
